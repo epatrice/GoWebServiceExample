@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -16,9 +17,10 @@ const maxId = 1000
 // Model for a book
 // Notice the json tag. Go Json package use this tag name to create JSON keys (e.g one of the JSON key is bookId)
 type Book struct {
-	BookId    int    `json:"bookId"`
-	BookName  string `json:"bookName"`
-	BookPrice int    `json:"price"`
+	BookId    int     `json:"bookId"`
+	BookName  string  `json:"bookName"`
+	BookPrice int     `json:"price"`
+	Author    *Author `json:"author"`
 }
 
 type Author struct {
@@ -34,6 +36,27 @@ func (b *Book) IsEmpty() bool {
 }
 
 func main() {
+	fmt.Println("Starting example web service")
+	r := mux.NewRouter()
+
+	// Put data in the "fake db"
+	books = append(books,
+		Book{BookId: 1, BookName: "Intro to C++", BookPrice: 50,
+			Author: &Author{Fullname: "Bjarne Stroustrup", Website: "https://fakeCPPAuthor.com"}})
+
+	books = append(books,
+		Book{BookId: 2, BookName: "Intro to Go", BookPrice: 20,
+			Author: &Author{Fullname: "Rob Pike", Website: "https://fakeGoAuthor.com"}})
+
+	r.HandleFunc("/", serveHome).Methods("GET")
+	r.HandleFunc("/books", getAllBooks).Methods("GET")
+	r.HandleFunc("/book/{id}", getBook).Methods("GET")
+	r.HandleFunc("/book", createBook).Methods("POST")
+	r.HandleFunc("/book/{id}", updateBook).Methods("PUT")
+	r.HandleFunc("/book/{id}", deleteBook).Methods("DELETE")
+
+	// listen to a port
+	log.Fatal(http.ListenAndServe(":8080", r))
 
 }
 
@@ -50,23 +73,22 @@ func getAllBooks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(books)
 }
 
-func getOneBook(w http.ResponseWriter, r *http.Request) {
+func getBook(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("getOneBook called")
 	w.Header().Set("Content-Type", "application/json")
 
 	// get id from request url
 	params := mux.Vars(r)
+	idReceived, err := strconv.Atoi(params["id"])
+	if err != nil {
+		fmt.Printf("ID received from request param cannot be converted to an integer. The Id passed in is %s", params["id"])
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode("ID received from request param cannot be converted to an integer")
+		return
+	}
 
 	// find matching id and return the response
 	for _, book := range books {
-
-		idReceived, err := strconv.Atoi(params["id"])
-		if err != nil {
-			fmt.Printf("ID received from request param cannot be converted to an integer. The Id passed in is %s", params["id"])
-			json.NewEncoder(w).Encode("ID received from request param cannot be converted to an integer")
-			return
-		}
-
 		if book.BookId == idReceived {
 			json.NewEncoder(w).Encode(book)
 			return
@@ -74,24 +96,25 @@ func getOneBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// still return a response if no book is found
+	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode("No book found with this given id")
-	return
 }
 
-func createOneBook(w http.ResponseWriter, r *http.Request) {
+func createBook(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("createOneBook called")
 	w.Header().Set("Content-Type", "application/json")
 
 	// Handle when no body was sent in the request
 	if r.Body == nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode("Empty request body received. Body required")
 	}
 
-	// Request is empty json
-
+	// Handle the case when request is empty json
 	var book Book
 	_ = json.NewDecoder(r.Body).Decode(&book)
 	if book.IsEmpty() {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode("Empty JSON in request body received.")
 		return
 	}
@@ -101,6 +124,68 @@ func createOneBook(w http.ResponseWriter, r *http.Request) {
 	book.BookId = rand.Intn(maxId)
 
 	books = append(books, book)
-	json.NewEncoder(w).Encode("book")
-	return
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(book)
+}
+
+func updateBook(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("updateBook called")
+	w.Header().Set("Content-Type", "application/json")
+
+	// get id from request url
+	params := mux.Vars(r)
+	idReceived, err := strconv.Atoi(params["id"])
+
+	if err != nil {
+		fmt.Printf("ID received from request param cannot be converted to an integer. The Id passed in is %s", params["id"])
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode("ID received from request param cannot be converted to an integer")
+		return
+	}
+
+	// search for the book with this id. If exist, first remove the book with the id and add a new book from the request
+	for index, book := range books {
+		if book.BookId == idReceived {
+			// delete the current book
+			books = append(books[:index], books[index+1:]...)
+			var bookFromRequest Book
+			_ = json.NewDecoder(r.Body).Decode(&bookFromRequest)
+			bookFromRequest.BookId = idReceived
+			books = append(books, bookFromRequest)
+			json.NewEncoder(w).Encode(bookFromRequest)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode("Book Not Found")
+}
+
+func deleteBook(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("deleteBook called")
+	w.Header().Set("Content-Type", "application/json")
+
+	// get id from request url
+	params := mux.Vars(r)
+	idReceived, err := strconv.Atoi(params["id"])
+
+	if err != nil {
+		fmt.Printf("ID received from request param cannot be converted to an integer. The Id passed in is %s", params["id"])
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode("ID received from request param cannot be converted to an integer")
+		return
+	}
+
+	// search for the book with this id. If exist, first remove the book with the id and add a new book from the request
+	for index, book := range books {
+		if book.BookId == idReceived {
+			// delete the current book
+			books = append(books[:index], books[index+1:]...)
+			json.NewEncoder(w).Encode("Delete successful")
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode("Book Not Found")
 }

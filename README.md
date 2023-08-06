@@ -7,3 +7,7 @@ https://github.com/gorilla/mux
 
 You need to first run 
 `go get -u github.com/gorilla/mux` to set this up
+
+
+Start the code with
+`go run main.go`
