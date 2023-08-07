@@ -12,10 +12,12 @@ import (
 	"github.com/gorilla/mux"
 )
 
-const maxId = 1000
+const maxId = 1000   // Max Unique Id (0 - maxId-1) to generate for BookId
+const port = ":8080" // Port number to start this web service
 
 // Model for a book
-// Notice the json tag. Go Json package use this tag name to create JSON keys (e.g one of the JSON key is bookId)
+// Notice the json tag. Go Json package use this tag name to create JSON keys
+// (e.g the JSON obj keys are bookId, bookName, price and author)
 type Book struct {
 	BookId    int     `json:"bookId"`
 	BookName  string  `json:"bookName"`
@@ -23,6 +25,7 @@ type Book struct {
 	Author    *Author `json:"author"`
 }
 
+// Model for Author
 type Author struct {
 	Fullname string `json:"fullname"`
 	Website  string `json:"website"`
@@ -39,7 +42,7 @@ func main() {
 	fmt.Println("Starting example web service")
 	r := mux.NewRouter()
 
-	// Put data in the "fake db"
+	// Insert data in the "fake db"
 	books = append(books,
 		Book{BookId: 1, BookName: "Intro to C++", BookPrice: 50,
 			Author: &Author{Fullname: "Bjarne Stroustrup", Website: "https://fakeCPPAuthor.com"}})
@@ -55,14 +58,14 @@ func main() {
 	r.HandleFunc("/book/{id}", updateBook).Methods("PUT")
 	r.HandleFunc("/book/{id}", deleteBook).Methods("DELETE")
 
-	// listen to a port
-	log.Fatal(http.ListenAndServe(":8080", r))
+	// listen to the port specified in the constant above
+	log.Fatal(http.ListenAndServe(port, r))
 
 }
 
 // controllers
 
-// serve home route
+// serve home route ("/")
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("<h1>Welcome to my Go Web Service</h1>"))
 }
